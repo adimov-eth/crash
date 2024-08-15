@@ -1,0 +1,152 @@
+:root {
+  font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+
+  color-scheme: light dark;
+  color: rgba(255, 255, 255, 0.87);
+  background-color: #242424;
+
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+a {
+  font-weight: 500;
+  color: #646cff;
+  text-decoration: inherit;
+}
+a:hover {
+  color: #535bf2;
+}
+
+body {
+  margin: 0;
+  display: flex;
+  place-items: center;
+  min-width: 320px;
+  min-height: 100vh;
+}
+
+h1 {
+  font-size: 3.2em;
+  line-height: 1.1;
+}
+
+button {
+  border-radius: 8px;
+  border: 1px solid transparent;
+  padding: 0.6em 1.2em;
+  font-size: 1em;
+  font-weight: 500;
+  font-family: inherit;
+  background-color: #1a1a1a;
+  cursor: pointer;
+  transition: border-color 0.25s;
+}
+button:hover {
+  border-color: #646cff;
+}
+button:focus,
+button:focus-visible {
+  outline: 4px auto -webkit-focus-ring-color;
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    color: #213547;
+    background-color: #ffffff;
+  }
+  a:hover {
+    color: #747bff;
+  }
+  button {
+    background-color: #f9f9f9;
+  }
+}
+
+
+.roo246 {
+  width: 100%;
+  margin: 0 auto;
+  display: flex;
+  max-width: 1200px;
+  border-radius: 12px;
+  flex-direction: column;
+  background-color: #191939;
+}
+
+.roo253 {
+  margin: 0 auto;
+  display: flex;
+  transition: .3s ease;
+  border-radius: 12px;
+  flex-direction: column;
+  background-color: #090C1D;
+}
+
+.roo254 {
+  display: flex;
+  overflow: hidden;
+  position: relative;
+  flex-grow: 1;
+  min-height: 221px;
+  align-items: center;
+  margin-inline: auto;
+  justify-content: center;
+  background-color: #090C1D;
+}
+
+.roo260 {
+  height: 56px;
+  display: flex;
+  padding: 8px 16px;
+  overflow: hidden;
+  position: relative;
+  border-top: 2px solid #191939;
+  align-items: center;
+  border-radius: 0 0 12px 12px;
+  background-color: #090C1D;
+}
+
+.roo430 {
+  padding: 8px;
+}
+
+.roo431 {
+  color: #fff;
+  background: #f44336;
+}
+
+.roo432 {
+  color: #fff;
+  background: #60af5a;
+}
+
+.roo422 {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+  position: relative;
+  flex-wrap: nowrap;
+  align-items: center;
+}
+
+.roo424 {
+  padding: 6px 8px;
+  min-width: initial;
+  font-weight: 700;
+}
+
+.roo363 {
+  top: 48px;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 10;
+  overflow: hidden;
+  position: absolute;
+  background: #0d0e20;
+}

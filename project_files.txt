@@ -1,0 +1,1772 @@
+
+--- ./README.md ---
+
+# React + Vite
+
+This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+
+Currently, two official plugins are available:
+
+- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react/README.md) uses [Babel](https://babeljs.io/) for Fast Refresh
+- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+
+--- ./index.html ---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Vite + React</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>
+
+--- ./package.json ---
+
+{
+  "name": "crash-game",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "lint": "eslint .",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@emotion/react": "^11.13.0",
+    "@emotion/styled": "^11.13.0",
+    "@mui/material": "^5.16.7",
+    "@pixi/react": "^7.1.2",
+    "@pixi/react-animated": "^7.1.3",
+    "axios": "^0.21.1",
+    "i18next": "^23.12.3",
+    "numeral": "^2.0.6",
+    "pixi.js": "^7.2.4",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-i18next": "^15.0.1",
+    "react-router-dom": "^6.26.0",
+    "socket.io-client": "^4.7.5"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.8.0",
+    "@types/react": "^18.3.3",
+    "@types/react-dom": "^18.3.0",
+    "@vitejs/plugin-react": "^4.3.1",
+    "eslint": "^9.8.0",
+    "eslint-plugin-react": "^7.35.0",
+    "eslint-plugin-react-hooks": "^5.1.0-rc.0",
+    "eslint-plugin-react-refresh": "^0.4.9",
+    "globals": "^15.9.0",
+    "vite": "^5.4.0"
+  }
+}
+
+--- ./src/App.css ---
+
+#root {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 2rem;
+  text-align: center;
+}
+
+.logo {
+  height: 6em;
+  padding: 1.5em;
+  will-change: filter;
+  transition: filter 300ms;
+}
+.logo:hover {
+  filter: drop-shadow(0 0 2em #646cffaa);
+}
+.logo.react:hover {
+  filter: drop-shadow(0 0 2em #61dafbaa);
+}
+
+@keyframes logo-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  a:nth-of-type(2) .logo {
+    animation: logo-spin infinite 20s linear;
+  }
+}
+
+.card {
+  padding: 2em;
+}
+
+.read-the-docs {
+  color: #888;
+}
+
+--- ./src/App.jsx ---
+
+// src/App.jsx or src/main.jsx (depending on your setup)
+import React from 'react';
+import { ThemeProvider } from '@mui/material/styles';
+import CssBaseline from '@mui/material/CssBaseline';
+import theme from './theme';
+import CrashPage from './pages/CrashPage';
+
+function App() {
+  return (
+    <ThemeProvider theme={theme}>
+      <CssBaseline />
+      <CrashPage />
+    </ThemeProvider>
+  );
+}
+
+export default App;
+
+--- ./src/assets/index.js ---
+
+import defaultRocket from './default_rocket_3.png';
+import explosions from './explosions.png';
+import fire from './fire.png';
+import particle from './particle.png';
+
+export const Assets = {
+  defaultRocket,
+  explosions,
+  fire,
+  particle
+};
+
+--- ./src/components/CrashGame/CrashGame.jsx ---
+
+import { useCrashGame } from '@/contexts/CrashGameContext';
+import GameCanvas from './GameCanvas';
+import GameControls from './GameControls';
+import GameHistory from './GameHistory';
+import PlayerList from './PlayerList';
+
+const CrashGame = () => {
+  const { state } = useCrashGame();
+
+  return (
+    <div className="crash-game">
+      <h1>Crash Game</h1>
+      <GameCanvas />
+      <GameControls />
+      <GameHistory />
+      <PlayerList />
+    </div>
+  );
+};
+
+export default CrashGame;
+
+--- ./src/components/CrashGame/GameCanvas.jsx ---
+
+import React, { useRef, useEffect, useState } from 'react';
+import { Stage, Container, Sprite, Text,  useTick} from '@pixi/react';
+import * as PIXI from 'pixi.js';
+import { useCrashGame } from '../../contexts/CrashGameContext';
+import CrashEngine from '../../engine/CrashEngine';
+import { GAME_STATES, MOBILE_BREAKPOINT } from '../../utils/constants';
+import { formatMultiplier } from '../../utils/formatters';
+import { Assets } from '../../assets';
+
+
+const CrashCurve = ({ engine, color }) => {
+    const graphicsRef = useRef(null);
+  
+    useTick(() => {
+      const graphics = graphicsRef.current;
+      if (graphics) {
+        graphics.clear();
+        graphics.lineStyle(3, color);
+        
+        let lastX = null;
+        for (let elapsed = 0; elapsed <= engine.elapsedTime; elapsed += 100) {
+          const { x, y } = engine.getElapsedPosition(elapsed);
+          if (elapsed === 0) {
+            graphics.moveTo(x, y);
+          } else {
+            if (lastX === null || x - lastX >= 10) {
+              graphics.lineTo(x, y);
+              lastX = x;
+            }
+          }
+        }
+      }
+    });
+  
+    return <graphics ref={graphicsRef} />;
+  };
+
+  const GameRocket = ({ engine }) => {
+    const [position, setPosition] = useState({ x: 0, y: 0 });
+    const [rotation, setRotation] = useState(0);
+    const rocketRef = useRef(null);
+  
+    useEffect(() => {
+      rocketRef.current = engine.createSeededRocket(engine.gameId);
+      return () => {
+        if (rocketRef.current) {
+          rocketRef.current.destroy();
+        }
+      };
+    }, [engine]);
+  
+    useTick(() => {
+      if (rocketRef.current) {
+        const { x, y } = engine.getElapsedPosition(engine.elapsedTime);
+        setPosition({ x, y });
+        setRotation(rocketRef.current.rotation);
+      }
+    });
+  
+    return (
+        <Container x={position.x} y={position.y} rotation={rotation}>
+          <Sprite 
+            texture={PIXI.Texture.from(Assets.defaultRocket)}
+            anchor={0.5}
+          />
+        </Container>
+      );
+    };
+
+const GameCanvas = () => {
+    const { gameState, currentMultiplier, crashPoint, gameId } = useCrashGame();
+    const [canvasSize, setCanvasSize] = useState({ width: 800, height: 600 });
+    const engineRef = useRef(new CrashEngine());
+  
+    useEffect(() => {
+      const handleResize = () => {
+        const width = window.innerWidth > MOBILE_BREAKPOINT ? 800 : window.innerWidth;
+        const height = width * 0.75;
+        setCanvasSize({ width, height });
+        engineRef.current.onResize(width, height);
+      };
+  
+      handleResize();
+      window.addEventListener('resize', handleResize);
+      return () => window.removeEventListener('resize', handleResize);
+    }, []);
+  
+    useEffect(() => {
+      engineRef.current.gameId = gameId;
+      engineRef.current.state = gameState;
+      if (gameState === GAME_STATES.ACTIVE) {
+        engineRef.current.startTime = Date.now();
+      } else if (gameState === GAME_STATES.OVER) {
+        engineRef.current.finalMultiplier = crashPoint;
+      }
+    }, [gameState, gameId, crashPoint]);
+  
+    return (
+      <Stage width={canvasSize.width} height={canvasSize.height} options={{ backgroundColor: 0x0d0e20 }}>
+        <Container>
+          <CrashCurve engine={engineRef.current} color={0x00ff00} />
+          {CrashEngine.RocketVisibleStates.includes(gameState) && (
+            <GameRocket engine={engineRef.current} />
+          )}
+          <Text 
+            text={formatMultiplier(currentMultiplier)} 
+            x={canvasSize.width / 2} 
+            y={canvasSize.height / 2}
+            anchor={0.5}
+            style={{
+              fontFamily: 'Arial',
+              fontSize: 24,
+              fill: 0xffffff,
+            }}
+          />
+        </Container>
+      </Stage>
+    );
+  };
+  
+  export default GameCanvas;
+
+--- ./src/components/CrashGame/GameControls.jsx ---
+
+import React, { useState, useEffect } from 'react';
+import { TextField, Button, Switch, FormControlLabel, Tooltip } from '@mui/material';
+import { styled } from '@mui/material/styles';
+import { useCrashGame } from '../../contexts/CrashGameContext';
+import { GAME_STATES } from '../../utils/constants';
+import { formatCurrency } from '../../utils/formatters';
+
+const ControlsContainer = styled('div')(({ theme }) => ({
+  display: 'flex',
+  flexDirection: 'column',
+  gap: theme.spacing(2),
+  padding: theme.spacing(2),
+  backgroundColor: theme.palette.background.paper,
+  borderRadius: theme.shape.borderRadius,
+}));
+
+const ButtonsContainer = styled('div')(({ theme }) => ({
+  display: 'flex',
+  gap: theme.spacing(2),
+}));
+
+const GameControls = () => {
+  const {
+    gameState,
+    playerBet,
+    placeBet,
+    cashout,
+    setAutoCashoutMultiplier,
+    formattedMultiplier,
+    formattedCashoutAmount,
+  } = useCrashGame();
+
+  const [betAmount, setBetAmount] = useState('');
+  const [autoCashoutAt, setAutoCashoutAt] = useState('');
+  const [isAutoBetting, setIsAutoBetting] = useState(false);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    if (gameState === GAME_STATES.STARTING) {
+      setError('');
+    }
+  }, [gameState]);
+
+  const handlePlaceBet = async () => {
+    try {
+      setError('');
+      await placeBet(parseFloat(betAmount), isAutoBetting ? parseFloat(autoCashoutAt) : null);
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  const handleCashout = async () => {
+    try {
+      setError('');
+      await cashout();
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  const handleAutoBetToggle = (event) => {
+    setIsAutoBetting(event.target.checked);
+    if (event.target.checked) {
+      setAutoCashoutMultiplier(parseFloat(autoCashoutAt));
+    } else {
+      setAutoCashoutMultiplier(null);
+    }
+  };
+
+  const isBettingPhase = gameState === GAME_STATES.STARTING;
+  const isActiveGame = gameState === GAME_STATES.ACTIVE;
+  const hasBet = !!playerBet;
+
+  return (
+    <ControlsContainer>
+      <TextField
+        label="Bet Amount"
+        type="number"
+        value={betAmount}
+        onChange={(e) => setBetAmount(e.target.value)}
+        disabled={!isBettingPhase || hasBet}
+      />
+      <FormControlLabel
+        control={
+          <Switch
+            checked={isAutoBetting}
+            onChange={handleAutoBetToggle}
+            disabled={!isBettingPhase || hasBet}
+          />
+        }
+        label="Auto Betting"
+      />
+      {isAutoBetting && (
+        <TextField
+          label="Auto Cashout At"
+          type="number"
+          value={autoCashoutAt}
+          onChange={(e) => setAutoCashoutAt(e.target.value)}
+          disabled={!isBettingPhase || hasBet}
+        />
+      )}
+      <ButtonsContainer>
+        {isBettingPhase && !hasBet && (
+          <Button variant="contained" color="primary" onClick={handlePlaceBet} fullWidth>
+            Place Bet
+          </Button>
+        )}
+        {isActiveGame && hasBet && (
+          <Tooltip title={`Cashout at ${formattedMultiplier}`}>
+            <Button variant="contained" color="secondary" onClick={handleCashout} fullWidth>
+              Cashout {formattedCashoutAmount}
+            </Button>
+          </Tooltip>
+        )}
+      </ButtonsContainer>
+      {error && <div style={{ color: 'red' }}>{error}</div>}
+      {hasBet && (
+        <div>
+          Current Bet: {formatCurrency(playerBet.amount)}
+          {playerBet.autoCashoutAt && ` (Auto cashout at ${playerBet.autoCashoutAt}x)`}
+        </div>
+      )}
+    </ControlsContainer>
+  );
+};
+
+export default GameControls;
+
+--- ./src/components/CrashGame/GameHistory.jsx ---
+
+import React, { useState, useEffect } from 'react';
+import { List, ListItem, ListItemText, Paper, Typography } from '@mui/material';
+import { styled } from '@mui/material/styles';
+import { useCrashGame } from '@/contexts/CrashGameContext';
+import { formatMultiplier } from '@/utils/formatters';
+
+
+const HistoryContainer = styled(Paper)(({ theme }) => ({
+  maxHeight: 300,
+  overflow: 'auto',
+  marginTop: theme.spacing(2),
+  backgroundColor: theme.palette.background.paper,
+}));
+
+const HistoryItem = styled(ListItem)(({ theme, crashPoint }) => ({
+  padding: theme.spacing(1, 2),
+  color: getCrashPointColor(crashPoint),
+  '&:hover': {
+    backgroundColor: theme.palette.action.hover,
+  },
+  animation: 'fadeIn 0.5s ease-in',
+  '@keyframes fadeIn': {
+    '0%': { opacity: 0, transform: 'translateY(-10px)' },
+    '100%': { opacity: 1, transform: 'translateY(0)' },
+  },
+}));
+
+const getCrashPointColor = (crashPoint) => {
+  if (crashPoint < 1.5) return '#ff4d4d'; // Red for low crash points
+  if (crashPoint < 3) return '#ffff4d'; // Yellow for medium crash points
+  return '#4dff4d'; // Green for high crash points
+};
+
+const GameHistory = () => {
+  const { gameHistory, gameState } = useCrashGame();
+  const [displayHistory, setDisplayHistory] = useState([]);
+
+  useEffect(() => {
+    if (gameHistory.length > displayHistory.length) {
+      setDisplayHistory(gameHistory.slice(0, 10)); // Display last 10 games
+    }
+  }, [gameHistory, gameState]);
+
+  return (
+    <HistoryContainer>
+      <Typography variant="h6" align="center" gutterBottom>
+        Game History
+      </Typography>
+      <List>
+        {displayHistory.map((game, index) => (
+          <HistoryItem key={game.id || index} crashPoint={game.crashPoint}>
+            <ListItemText
+              primary={`${formatMultiplier(game.crashPoint)}x`}
+              secondary={`Game #${game.id}`}
+            />
+          </HistoryItem>
+        ))}
+      </List>
+    </HistoryContainer>
+  );
+};
+
+export default GameHistory;
+
+--- ./src/components/CrashGame/PlayerList.jsx ---
+
+// src/components/CrashGame/PlayerList.jsx
+import React, { useState, useEffect } from 'react';
+import { 
+  Table, 
+  TableBody, 
+  TableCell, 
+  TableContainer, 
+  TableHead, 
+  TableRow, 
+  Paper, 
+  Typography,
+  TableSortLabel
+} from '@mui/material';
+import { styled } from '@mui/system';
+import { useCrashGame } from '@/contexts/CrashGameContext';
+import { formatCurrency, formatMultiplier } from '@/utils/formatters';
+import { GAME_STATES } from '@/utils/constants';
+
+const ListContainer = styled(Paper)(({ theme }) => ({
+  maxHeight: 400,
+  overflow: 'auto',
+  marginTop: theme.spacing(2),
+  backgroundColor: theme.palette.background.paper,
+}));
+
+const StyledTableRow = styled(TableRow)(({ theme, status }) => ({
+  '&:nth-of-type(odd)': {
+    backgroundColor: theme.palette.action.hover,
+  },
+  backgroundColor: 
+    status === 'cashed_out' ? theme.palette.success.light :
+    status === 'busted' ? theme.palette.error.light :
+    'inherit',
+  transition: 'background-color 0.3s',
+}));
+
+const PlayerList = () => {
+  const { bets, gameState, currentMultiplier } = useCrashGame();
+  const [sortedBets, setSortedBets] = useState([]);
+  const [sortConfig, setSortConfig] = useState({ key: 'betAmount', direction: 'desc' });
+
+  useEffect(() => {
+    const betsArray = Object.values(bets);
+    const sorted = [...betsArray].sort((a, b) => {
+      if (a[sortConfig.key] < b[sortConfig.key]) {
+        return sortConfig.direction === 'asc' ? -1 : 1;
+      }
+      if (a[sortConfig.key] > b[sortConfig.key]) {
+        return sortConfig.direction === 'asc' ? 1 : -1;
+      }
+      return 0;
+    });
+    setSortedBets(sorted);
+  }, [bets, sortConfig]);
+
+  const requestSort = (key) => {
+    let direction = 'asc';
+    if (sortConfig.key === key && sortConfig.direction === 'asc') {
+      direction = 'desc';
+    }
+    setSortConfig({ key, direction });
+  };
+
+  const getPlayerStatus = (bet) => {
+    if (gameState === GAME_STATES.ACTIVE) {
+      return bet.cashedOut ? 'cashed_out' : 'active';
+    }
+    if (gameState === GAME_STATES.OVER) {
+      return bet.cashedOut ? 'cashed_out' : 'busted';
+    }
+    return 'betting';
+  };
+
+  return (
+    <ListContainer>
+      <Typography variant="h6" align="center" gutterBottom>
+        Player List
+      </Typography>
+      <TableContainer>
+        <Table stickyHeader aria-label="player list">
+          <TableHead>
+            <TableRow>
+              <TableCell>Player</TableCell>
+              <TableCell sortDirection={sortConfig.key === 'betAmount' ? sortConfig.direction : false}>
+                <TableSortLabel
+                  active={sortConfig.key === 'betAmount'}
+                  direction={sortConfig.key === 'betAmount' ? sortConfig.direction : 'asc'}
+                  onClick={() => requestSort('betAmount')}
+                >
+                  Bet Amount
+                </TableSortLabel>
+              </TableCell>
+              <TableCell>Multiplier / Profit</TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {sortedBets.map((bet) => {
+              const status = getPlayerStatus(bet);
+              const multiplier = bet.cashedOut ? bet.cashoutMultiplier : currentMultiplier;
+              const profit = bet.betAmount * (multiplier - 1);
+
+              return (
+                <StyledTableRow key={bet.userId} status={status}>
+                  <TableCell>{bet.user?.name || 'Anonymous'}</TableCell>
+                  <TableCell>{formatCurrency(bet.betAmount)}</TableCell>
+                  <TableCell>
+                    {status === 'cashed_out' && `${formatMultiplier(bet.cashoutMultiplier)}x / ${formatCurrency(profit)}`}
+                    {status === 'active' && `${formatMultiplier(currentMultiplier)}x / ${formatCurrency(profit)}`}
+                    {status === 'busted' && 'BUST'}
+                    {status === 'betting' && 'Betting...'}
+                  </TableCell>
+                </StyledTableRow>
+              );
+            })}
+          </TableBody>
+        </Table>
+      </TableContainer>
+    </ListContainer>
+  );
+};
+
+export default PlayerList;
+
+--- ./src/contexts/CrashGameContext.jsx ---
+
+import React, { createContext, useContext, useReducer, useCallback, useRef, useEffect } from 'react';
+import CrashEngine from '../engine/CrashEngine';
+import { useSocket } from '../hooks/useSocket';
+import { GAME_STATES } from '../utils/constants';
+import { formatCurrency, formatMultiplier } from '../utils/formatters';
+import { getActiveGame, placeBet, cashout } from '../services/crashApi';
+
+const CrashGameContext = createContext();
+
+const initialState = {
+  gameState: GAME_STATES.LOADING,
+  gameHistory: [],
+  currentMultiplier: 1,
+  crashPoint: null,
+  bets: {},
+  playerBet: null,
+  cashoutAmount: null,
+  isAutoCashout: false,
+  autoCashoutMultiplier: null,
+  gameId: null,
+  error: null,
+};
+
+function crashGameReducer(state, action) {
+  switch (action.type) {
+    case 'SET_GAME_STATE':
+      return { ...state, gameState: action.payload };
+    case 'SET_CURRENT_MULTIPLIER':
+      return { ...state, currentMultiplier: action.payload };
+    case 'SET_CRASH_POINT':
+      return { ...state, crashPoint: action.payload };
+    case 'SET_BETS':
+      return { ...state, bets: action.payload };
+    case 'SET_PLAYER_BET':
+      return { ...state, playerBet: action.payload };
+    case 'SET_CASHOUT_AMOUNT':
+      return { ...state, cashoutAmount: action.payload };
+    case 'SET_AUTO_CASHOUT':
+      return { ...state, isAutoCashout: action.payload };
+    case 'SET_AUTO_CASHOUT_MULTIPLIER':
+      return { ...state, autoCashoutMultiplier: action.payload };
+    case 'SET_GAME_ID':
+      return { ...state, gameId: action.payload };
+    case 'SET_ERROR':
+      return { ...state, error: action.payload };
+    case 'ADD_TO_GAME_HISTORY':
+      return {
+        ...state,
+        gameHistory: [action.payload, ...state.gameHistory].slice(0, 50),
+      };
+    default:
+      return state;
+  }
+}
+
+export function CrashGameProvider({ children }) {
+  const [state, dispatch] = useReducer(crashGameReducer, initialState);
+  const socket = useSocket();
+  const engineRef = useRef(new CrashEngine());
+
+  const updateGameState = useCallback((gameData) => {
+    dispatch({ type: 'SET_GAME_STATE', payload: gameData.state });
+    dispatch({ type: 'SET_GAME_ID', payload: gameData.id });
+
+    if (gameData.state === GAME_STATES.ACTIVE) {
+      engineRef.current.startTime = Date.now();
+      engineRef.current.state = GAME_STATES.ACTIVE;
+    } else if (gameData.state === GAME_STATES.OVER) {
+      dispatch({ type: 'SET_CRASH_POINT', payload: gameData.crashPoint });
+      engineRef.current.finalMultiplier = gameData.crashPoint;
+      engineRef.current.state = GAME_STATES.OVER;
+    }
+  }, []);
+
+  const fetchActiveGame = useCallback(async () => {
+    try {
+      const game = await getActiveGame();
+      updateGameState(game);
+    } catch (error) {
+      dispatch({ type: 'SET_ERROR', payload: 'Failed to fetch active game' });
+    }
+  }, [updateGameState]);
+
+  const placeBetHandler = useCallback(async (amount, autoCashoutAt = null) => {
+    try {
+      const response = await placeBet(amount, autoCashoutAt);
+      dispatch({ type: 'SET_PLAYER_BET', payload: { amount, autoCashoutAt } });
+      dispatch({ type: 'SET_AUTO_CASHOUT', payload: !!autoCashoutAt });
+      dispatch({ type: 'SET_AUTO_CASHOUT_MULTIPLIER', payload: autoCashoutAt });
+      return response;
+    } catch (error) {
+      dispatch({ type: 'SET_ERROR', payload: 'Failed to place bet' });
+      throw error;
+    }
+  }, []);
+
+  const cashoutHandler = useCallback(async () => {
+    if (!state.playerBet || state.gameState !== GAME_STATES.ACTIVE) return;
+    
+    try {
+      const response = await cashout(state.gameId);
+      const cashoutMultiplier = engineRef.current.multiplier;
+      const cashoutAmount = state.playerBet.amount * cashoutMultiplier;
+      dispatch({ type: 'SET_CASHOUT_AMOUNT', payload: cashoutAmount });
+      dispatch({ type: 'SET_PLAYER_BET', payload: null });
+      return response;
+    } catch (error) {
+      dispatch({ type: 'SET_ERROR', payload: 'Failed to cashout' });
+      throw error;
+    }
+  }, [state.playerBet, state.gameState, state.gameId]);
+
+  useEffect(() => {
+    fetchActiveGame();
+    
+    const gameTickInterval = setInterval(() => {
+      if (state.gameState === GAME_STATES.ACTIVE) {
+        const elapsed = Date.now() - engineRef.current.startTime;
+        const multiplier = CrashEngine.getElapsedPayout(elapsed);
+        dispatch({ type: 'SET_CURRENT_MULTIPLIER', payload: multiplier });
+
+        if (state.isAutoCashout && multiplier >= state.autoCashoutMultiplier) {
+          cashoutHandler();
+        }
+      }
+    }, 100); // Update every 100ms
+
+    return () => clearInterval(gameTickInterval);
+  }, [fetchActiveGame, state.gameState, state.isAutoCashout, state.autoCashoutMultiplier, cashoutHandler]);
+
+  useEffect(() => {
+    if (!socket.isConnected) return;
+  
+    const handleBetPlaced = (bet) => {
+      dispatch({ type: 'SET_BETS', payload: (prevBets) => ({ ...prevBets, [bet.userId]: bet }) });
+    };
+  
+    const handlePlayerCashout = (cashoutData) => {
+      dispatch({
+        type: 'SET_BETS',
+        payload: (prevBets) => ({
+          ...prevBets,
+          [cashoutData.userId]: {
+            ...prevBets[cashoutData.userId],
+            cashedOut: true,
+            cashoutMultiplier: cashoutData.multiplier
+          }
+        })
+      });
+    };
+  
+    socket.on('gameUpdate', updateGameState);
+    socket.on('betPlaced', handleBetPlaced);
+    socket.on('playerCashout', handlePlayerCashout);
+  
+    return () => {
+      socket.off('gameUpdate');
+      socket.off('betPlaced');
+      socket.off('playerCashout');
+    };
+  }, [socket, updateGameState]);
+
+  const value = {
+    ...state,
+    placeBet: placeBetHandler,
+    cashout: cashoutHandler,
+    setAutoCashoutMultiplier: (multiplier) => dispatch({ type: 'SET_AUTO_CASHOUT_MULTIPLIER', payload: multiplier }),
+    fetchActiveGame,
+    formattedMultiplier: formatMultiplier(state.currentMultiplier),
+    formattedCrashPoint: state.crashPoint ? formatMultiplier(state.crashPoint) : null,
+    formattedCashoutAmount: state.cashoutAmount ? formatCurrency(state.cashoutAmount) : null,
+  };
+
+  return <CrashGameContext.Provider value={value}>{children}</CrashGameContext.Provider>;
+}
+
+export function useCrashGame() {
+  const context = useContext(CrashGameContext);
+  if (context === undefined) {
+    throw new Error('useCrashGame must be used within a CrashGameProvider');
+  }
+  return context;
+}
+
+--- ./src/engine/CrashEngine.js ---
+
+// src/engine/CrashEngine.js
+import { GAME_STATES, CRASH_SPEED, PREDICTING_LAPSE, X_AXIS_MINIMUM, Y_AXIS_MINIMUM, Y_AXIS_MULTIPLIER } from '@utils/constants';
+import { SeededRandom } from '@/utils/random';
+import { Rocket} from './RocketAnimation';
+import { Assets } from '@/assets';
+
+class CrashEngine {
+    constructor(app, rocketsConfig = []) {
+        this.app = app;
+        this.rocketsConfig = rocketsConfig;
+        this.currentRocketConfig = null;
+        this.state = GAME_STATES.LOADING;
+        this.gameId = null;
+        this.startTime = 0;
+        this.elapsedTime = 0;
+        this.finalElapsed = 0;
+        this.finalMultiplier = 0;
+        this.crashPoint = null;
+        this.betAmount = 0;
+        this.graphWidth = 0;
+        this.graphHeight = 0;
+        this.plotWidth = 0;
+        this.plotHeight = 0;
+        this.plotOffsetX = 0;
+        this.plotOffsetY = 0;
+        this.xAxis = 0;
+        this.yAxis = 0;
+        this.xIncrement = 0;
+        this.yIncrement = 0;
+        this.xAxisMinimum = X_AXIS_MINIMUM;
+        this.yAxisMinimum = Y_AXIS_MINIMUM;
+        this.elapsedOffset = 0;
+        this.yAxisMultiplier = Y_AXIS_MULTIPLIER;
+        this.lastGameTick = null;
+        this.tickTimeout = null;
+        this.lag = false;
+        this.lagTimeout = null;
+
+        this.updateRocketConfig();
+
+        this.createSeededRocket = (seed) => {
+            const { skins, emitter } = this.currentRocketConfig;
+            const randomIndex = Math.floor(Math.random() * skins.length);
+            return new Rocket(skins[randomIndex] || Assets.defaultRocket, emitter);
+            };
+    }
+
+    updateRocketConfig() {
+        this.currentRocketConfig = this.getRocketConfig();
+    }
+
+    getRocketConfig() {
+        if (!this.rocketsConfig || !this.rocketsConfig.rockets || !this.rocketsConfig.rockets.default) {
+            // Fallback to a default configuration if the passed config is incomplete
+            return {
+                skins: [Assets.defaultRocket],
+                emitter: {
+                    lifetime: { min: 0.1, max: 0.3 },
+                    frequency: 0.001,
+                    spawnChance: 1,
+                    particlesPerWave: 1,
+                    emitterLifetime: 0,
+                    maxParticles: 1000,
+                    addAtBack: false,
+                    pos: { x: 0, y: 0 },
+                    behaviors: [
+                        {
+                            type: 'alpha',
+                            config: {
+                                alpha: {
+                                    list: [
+                                        { value: 0.8, time: 0 },
+                                        { value: 0, time: 1 }
+                                    ]
+                                }
+                            }
+                        },
+                        {
+                            type: 'scale',
+                            config: {
+                                scale: {
+                                    list: [
+                                        { value: 1, time: 0 },
+                                        { value: 0.3, time: 1 }
+                                    ]
+                                }
+                            }
+                        },
+                        {
+                            type: 'color',
+                            config: {
+                                color: {
+                                    list: [
+                                        { value: "fb1010", time: 0 },
+                                        { value: "f5b830", time: 0.5 },
+                                        { value: "2020ff", time: 1 }
+                                    ]
+                                }
+                            }
+                        },
+                        {
+                            type: 'moveSpeed',
+                            config: {
+                                speed: {
+                                    list: [
+                                        { value: 200, time: 0 },
+                                        { value: 100, time: 1 }
+                                    ]
+                                }
+                            }
+                        },
+                        {
+                            type: 'rotationStatic',
+                            config: { min: 0, max: 360 }
+                        },
+                        {
+                            type: 'textureRandom',
+                            config: {
+                                textures: [Assets.fire, Assets.particle]
+                            }
+                        },
+                        {
+                            type: 'spawnShape',
+                            config: {
+                                type: 'torus',
+                                data: {
+                                    x: 0,
+                                    y: 0,
+                                    radius: 10,
+                                    innerRadius: 0,
+                                    affectRotation: false
+                                }
+                            }
+                        }
+                    ]
+                }
+            };
+        }
+      }
+
+    
+
+    onGameTick(timestamp) {
+        this.lastGameTick = Date.now();
+        this.lag = false;
+        const timeDiff = this.lastGameTick - timestamp;
+        if (this.startTime > timeDiff) {
+            this.startTime = timeDiff;
+        }
+        if (this.lagTimeout) {
+            clearTimeout(this.lagTimeout);
+        }
+        this.lagTimeout = setTimeout(this.checkForLag, PREDICTING_LAPSE);
+    }
+
+    checkForLag = () => {
+        this.lag = true;
+    };
+
+    tick() {
+        this.elapsedTime = this.getElapsedTime();
+        this.multiplier = this.state !== GAME_STATES.OVER
+            ? CrashEngine.getElapsedPayout(this.elapsedTime)
+            : this.finalMultiplier;
+        this.yAxisMinimum = this.yAxisMultiplier;
+        this.yAxis = this.yAxisMinimum;
+        this.xAxis = Math.max(this.elapsedTime + this.elapsedOffset, this.xAxisMinimum);
+        if (this.multiplier > this.yAxisMinimum) {
+            this.yAxis = this.multiplier;
+        }
+        this.xIncrement = this.plotWidth / this.xAxis;
+        this.yIncrement = this.plotHeight / this.yAxis;
+    }
+
+    clearTickTimeouts() {
+        clearTimeout(this.tickTimeout);
+        clearTimeout(this.lagTimeout);
+    }
+
+    destroy() {
+        this.clearTickTimeouts();
+    }
+
+    getElapsedTime() {
+        if (this.state === GAME_STATES.OVER) {
+            return this.finalElapsed;
+        }
+        if (this.state !== GAME_STATES.ACTIVE) {
+            return 0;
+        }
+        return Date.now() - this.startTime;
+    }
+
+    getElapsedPosition(elapsed) {
+        const multiplier = CrashEngine.getElapsedPayout(elapsed) - 1;
+        return {
+            x: elapsed * this.xIncrement,
+            y: this.plotHeight - multiplier * this.yIncrement
+        };
+    }
+
+    getYMultiplier(y) {
+        return Math.ceil(1000 * (this.yAxis - y / this.plotHeight * this.yAxis + 1)) / 1000;
+    }
+
+    getMultiplierY(multiplier) {
+        return this.plotHeight - (multiplier - 1) * this.yIncrement;
+    }
+
+    onResize(width, height) {
+        this.graphWidth = width;
+        this.graphHeight = height;
+        this.plotOffsetX = 50;
+        this.plotOffsetY = 40;
+        this.plotWidth = width - this.plotOffsetX;
+        this.plotHeight = height - this.plotOffsetY;
+    }
+
+    static getMultiplierElapsed(multiplier) {
+        return 100 * Math.ceil(Math.log(multiplier) / Math.log(Math.E) / CRASH_SPEED / 100);
+    }
+
+    static getElapsedPayout(elapsed) {
+        const payout = ~~(100 * Math.E ** (CRASH_SPEED * elapsed)) / 100;
+        if (!Number.isFinite(payout)) {
+            throw new Error("Infinite payout");
+        }
+        return Math.max(payout, 1);
+    }
+}
+
+CrashEngine.States = GAME_STATES;
+CrashEngine.RocketVisibleStates = [GAME_STATES.ACTIVE, GAME_STATES.OVER];
+
+export default CrashEngine;
+
+--- ./src/engine/RocketAnimation.js ---
+
+import * as PIXI from 'pixi.js';
+import { Assets } from '@/assets';
+
+export class Rocket extends PIXI.Container {
+    constructor(skin, emitterConfig) {
+        super();
+    
+        this.ship = PIXI.Sprite.from(skin || Assets.defaultRocket);
+        this.ship.anchor.set(0.5, 0);
+        this.ship.y = -15;
+
+        this.ship.filters = [new PIXI.filters.DropShadowFilter({
+            alpha: 0.35,
+            blur: 0,
+            quality: 4,
+            distance: 3,
+            color: 0
+        })];
+
+        const scaleFactor = 100 / this.ship.height;
+        this.ship.height = 100;
+        this.ship.width = this.ship.width * scaleFactor;
+
+        const trailContainer = new PIXI.Container();
+            this.trailEmitter = new PIXI.particles.Emitter(trailContainer, {
+            ...emitterConfig,
+            textures: [PIXI.Texture.from(Assets.fire), PIXI.Texture.from(Assets.particle)],
+            pos: {
+                ...emitterConfig.pos,
+                y: this.ship.y + this.ship.height + 5
+            }
+        });
+
+        this.addChild(trailContainer, this.ship);
+
+        this._targetX = 0;
+        this._targetY = 0;
+        this._targetAngle = 0;
+        this._crashed = false;
+        this._updateAngle = false;
+    }
+
+    get angle() {
+        return super.angle;
+    }
+
+    set angle(value) {
+        if (Math.abs(value - super.angle) > 0.2) {
+            this._targetAngle = value;
+            this._updateAngle = true;
+        }
+    }
+
+    get crashed() {
+        return this._crashed;
+    }
+
+    set crashed(value) {
+        this.visible = false;
+        this._crashed = value;
+        this.trailEmitter.emit = false;
+        this.trailEmitter.cleanup();
+    }
+
+    tick(deltaTime) {
+        if (this._crashed) return;
+
+        if (this._updateAngle) {
+            super.angle = Wt(super.angle, this._targetAngle, 0.1);
+            this._updateAngle = false;
+        }
+
+        if (this.trailEmitter.emit) {
+            this.trailEmitter.update(0.001 * deltaTime);
+        }
+    }
+
+    destroy() {
+        super.destroy();
+        this.trailEmitter.emit = false;
+        this.trailEmitter.cleanup();
+        this.trailEmitter.destroy();
+        this.trailEmitter = undefined;
+    }
+}
+
+// Helper function (you might want to move this to a utilities file)
+function Wt(current, target, factor) {
+    return (1 - factor) * current + factor * target;
+}
+
+--- ./src/hooks/useCrashGame.js ---
+
+// src/hooks/useCrashGame.js
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { useSocket } from '@/hooks/useSocket';
+import CrashEngine from '@/engine/CrashEngine';
+import { GAME_STATES, CRASH_SPEED, PREDICTING_LAPSE } from '@/utils/constants';
+import { formatCurrency, formatMultiplier } from '@/utils/formatters';
+import { getActiveGame, placeBet, cashout } from '@/services/crashApi';
+
+export const useCrashGame = () => {
+    const [gameState, setGameState] = useState(GAME_STATES.LOADING);
+    const [currentMultiplier, setCurrentMultiplier] = useState(1);
+    const [crashPoint, setCrashPoint] = useState(null);
+    const [bets, setBets] = useState({});
+    const [playerBet, setPlayerBet] = useState(null);
+    const [cashoutAmount, setCashoutAmount] = useState(null);
+    const [isAutoCashout, setIsAutoCashout] = useState(false);
+    const [autoCashoutMultiplier, setAutoCashoutMultiplier] = useState(null);
+
+    const engineRef = useRef(null);
+    const gameIdRef = useRef(null);
+
+    const socket = useSocket();
+
+    useEffect(() => {
+        engineRef.current = new CrashEngine();
+        fetchActiveGame();
+
+        return () => {
+            if (engineRef.current) {
+                engineRef.current.destroy();
+            }
+        };
+    }, []);
+
+    const fetchActiveGame = async () => {
+        try {
+            const game = await getActiveGame();
+            gameIdRef.current = game.id;
+            updateGameState(game);
+        } catch (error) {
+            console.error('Failed to fetch active game:', error);
+        }
+    };
+
+    const updateGameState = useCallback((gameData) => {
+        setGameState(gameData.state);
+        if (gameData.state === GAME_STATES.ACTIVE) {
+            engineRef.current.startTime = Date.now();
+            engineRef.current.state = GAME_STATES.ACTIVE;
+        } else if (gameData.state === GAME_STATES.OVER) {
+            setCrashPoint(gameData.crashPoint);
+            engineRef.current.finalMultiplier = gameData.crashPoint;
+            engineRef.current.state = GAME_STATES.OVER;
+        }
+    }, []);
+
+    const placeBetHandler = async (amount, autoCashoutAt = null) => {
+        try {
+            const response = await placeBet(amount, autoCashoutAt);
+            setPlayerBet({ amount, autoCashoutAt });
+            setIsAutoCashout(!!autoCashoutAt);
+            setAutoCashoutMultiplier(autoCashoutAt);
+            return response;
+        } catch (error) {
+            console.error('Failed to place bet:', error);
+            throw error;
+        }
+    };
+
+    const cashoutHandler = useCallback(async () => {
+        if (!playerBet || gameState !== GAME_STATES.ACTIVE) return;
+        
+        try {
+            const response = await cashout(gameIdRef.current);
+            const cashoutMultiplier = engineRef.current.multiplier;
+            setCashoutAmount(playerBet.amount * cashoutMultiplier);
+            setPlayerBet(null);
+            return response;
+        } catch (error) {
+            console.error('Failed to cashout:', error);
+            throw error;
+        }
+    }, [playerBet, gameState]); 
+
+    useEffect(() => {
+        if (!socket.isConnected) return;
+
+        socket.on('gameUpdate', updateGameState);
+        socket.on('betPlaced', (bet) => {
+            setBets((prevBets) => ({ ...prevBets, [bet.userId]: bet }));
+        });
+        socket.on('playerCashout', (cashoutData) => {
+            setBets((prevBets) => ({
+                ...prevBets,
+                [cashoutData.userId]: { ...prevBets[cashoutData.userId], cashedOut: true, cashoutMultiplier: cashoutData.multiplier }
+            }));
+        });
+
+        return () => {
+            socket.off('gameUpdate');
+            socket.off('betPlaced');
+            socket.off('playerCashout');
+        };
+    }, [socket, updateGameState]);
+
+    useEffect(() => {
+        if (gameState !== GAME_STATES.ACTIVE) return;
+
+        const tickInterval = setInterval(() => {
+            const elapsed = Date.now() - engineRef.current.startTime;
+            const multiplier = Math.pow(Math.E, CRASH_SPEED * elapsed);
+            setCurrentMultiplier(multiplier);
+
+            if (isAutoCashout && multiplier >= autoCashoutMultiplier) {
+                cashoutHandler();
+            }
+        }, PREDICTING_LAPSE);
+
+        return () => clearInterval(tickInterval);
+    }, [gameState, isAutoCashout, autoCashoutMultiplier, cashoutHandler]);
+
+    return {
+        gameState,
+        currentMultiplier: formatMultiplier(currentMultiplier),
+        crashPoint: crashPoint ? formatMultiplier(crashPoint) : null,
+        bets,
+        playerBet,
+        cashoutAmount: cashoutAmount ? formatCurrency(cashoutAmount) : null,
+        placeBet: placeBetHandler,
+        cashout: cashoutHandler,
+        setAutoCashoutMultiplier,
+    };
+};
+
+--- ./src/hooks/useSocket.js ---
+
+// src/hooks/useSocket.js
+import { useState, useEffect } from 'react';
+import socketService from '@/services/socketService';
+
+export const useSocket = () => {
+    const [isConnected, setIsConnected] = useState(false);
+  
+    useEffect(() => {
+      socketService.connect();
+      setIsConnected(true);
+  
+      return () => {
+        socketService.disconnect();
+        setIsConnected(false);
+      };
+    }, []);
+  
+    const emit = (eventName, data) => {
+      socketService.emit(eventName, data);
+    };
+  
+    const on = (eventName, callback) => {
+      socketService.on(eventName, callback);
+    };
+  
+    const off = (eventName, callback) => {
+      socketService.off(eventName, callback);
+    };
+  
+    return {
+      isConnected,
+      emit,
+      on,
+      off,
+    };
+  };
+
+--- ./src/index.css ---
+
+:root {
+  font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+
+  color-scheme: light dark;
+  color: rgba(255, 255, 255, 0.87);
+  background-color: #242424;
+
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+a {
+  font-weight: 500;
+  color: #646cff;
+  text-decoration: inherit;
+}
+a:hover {
+  color: #535bf2;
+}
+
+body {
+  margin: 0;
+  display: flex;
+  place-items: center;
+  min-width: 320px;
+  min-height: 100vh;
+}
+
+h1 {
+  font-size: 3.2em;
+  line-height: 1.1;
+}
+
+button {
+  border-radius: 8px;
+  border: 1px solid transparent;
+  padding: 0.6em 1.2em;
+  font-size: 1em;
+  font-weight: 500;
+  font-family: inherit;
+  background-color: #1a1a1a;
+  cursor: pointer;
+  transition: border-color 0.25s;
+}
+button:hover {
+  border-color: #646cff;
+}
+button:focus,
+button:focus-visible {
+  outline: 4px auto -webkit-focus-ring-color;
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    color: #213547;
+    background-color: #ffffff;
+  }
+  a:hover {
+    color: #747bff;
+  }
+  button {
+    background-color: #f9f9f9;
+  }
+}
+
+
+.roo246 {
+  width: 100%;
+  margin: 0 auto;
+  display: flex;
+  max-width: 1200px;
+  border-radius: 12px;
+  flex-direction: column;
+  background-color: #191939;
+}
+
+.roo253 {
+  margin: 0 auto;
+  display: flex;
+  transition: .3s ease;
+  border-radius: 12px;
+  flex-direction: column;
+  background-color: #090C1D;
+}
+
+.roo254 {
+  display: flex;
+  overflow: hidden;
+  position: relative;
+  flex-grow: 1;
+  min-height: 221px;
+  align-items: center;
+  margin-inline: auto;
+  justify-content: center;
+  background-color: #090C1D;
+}
+
+.roo260 {
+  height: 56px;
+  display: flex;
+  padding: 8px 16px;
+  overflow: hidden;
+  position: relative;
+  border-top: 2px solid #191939;
+  align-items: center;
+  border-radius: 0 0 12px 12px;
+  background-color: #090C1D;
+}
+
+.roo430 {
+  padding: 8px;
+}
+
+.roo431 {
+  color: #fff;
+  background: #f44336;
+}
+
+.roo432 {
+  color: #fff;
+  background: #60af5a;
+}
+
+.roo422 {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+  position: relative;
+  flex-wrap: nowrap;
+  align-items: center;
+}
+
+.roo424 {
+  padding: 6px 8px;
+  min-width: initial;
+  font-weight: 700;
+}
+
+.roo363 {
+  top: 48px;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 10;
+  overflow: hidden;
+  position: absolute;
+  background: #0d0e20;
+}
+
+--- ./src/main.jsx ---
+
+// src/main.jsx
+import React from 'react'
+import ReactDOM from 'react-dom/client'
+import { BrowserRouter as Router } from 'react-router-dom'
+import { ThemeProvider } from '@mui/material/styles';
+import CssBaseline from '@mui/material/CssBaseline';
+import theme from './theme';
+import App from './App'
+import './index.css'
+
+ReactDOM.createRoot(document.getElementById('root')).render(
+  <React.StrictMode>
+    <ThemeProvider theme={theme}>
+      <CssBaseline />
+      <Router>
+        <App />
+      </Router>
+    </ThemeProvider>
+  </React.StrictMode>,
+)
+
+--- ./src/pages/CrashPage.jsx ---
+
+import React from 'react';
+import CrashGame from '@/components/CrashGame/CrashGame';
+import { CrashGameProvider } from '@/contexts/CrashGameContext';
+
+const CrashPage = () => {
+  return (
+    <CrashGameProvider>
+      <CrashGame />
+    </CrashGameProvider>
+  );
+};
+
+export default CrashPage;
+
+--- ./src/services/crashApi.js ---
+
+// src/services/crashApi.js
+import axios from 'axios';
+
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000/api';
+
+export const getActiveGame = async () => {
+  try {
+    const response = await axios.get(`${API_BASE_URL}/crash/active`);
+    return response.data;
+  } catch (error) {
+    console.error('Error fetching active game:', error);
+    throw error;
+  }
+};
+
+export const placeBet = async (amount, autoCashoutAt = null) => {
+  try {
+    const response = await axios.post(`${API_BASE_URL}/crash/bet`, { amount, autoCashoutAt });
+    return response.data;
+  } catch (error) {
+    console.error('Error placing bet:', error);
+    throw error;
+  }
+};
+
+export const cashout = async (gameId) => {
+  try {
+    const response = await axios.post(`${API_BASE_URL}/crash/cashout`, { gameId });
+    return response.data;
+  } catch (error) {
+    console.error('Error cashing out:', error);
+    throw error;
+  }
+};
+
+export const getGameHistory = async (limit = 50) => {
+  try {
+    const response = await axios.get(`${API_BASE_URL}/crash/history?limit=${limit}`);
+    return response.data;
+  } catch (error) {
+    console.error('Error fetching game history:', error);
+    throw error;
+  }
+};
+
+--- ./src/services/socketService.js ---
+
+import { io } from 'socket.io-client';
+
+import { SOCKET_URL } from '@/utils/constants';
+
+class SocketService {
+  constructor() {
+    this.socket = null;
+    this.listeners = new Map();
+  }
+
+  connect() {
+    this.socket = io(SOCKET_URL, {
+      transports: ['websocket'],
+      upgrade: false,
+    });
+
+    this.socket.on('connect', () => {
+      console.log('Socket connected');
+    });
+
+    this.socket.on('disconnect', () => {
+      console.log('Socket disconnected');
+    });
+
+    // Set up listeners for custom events
+    this.setupListeners();
+  }
+
+  disconnect() {
+    if (this.socket) {
+      this.socket.disconnect();
+    }
+  }
+
+  emit(eventName, data) {
+    if (this.socket) {
+      this.socket.emit(eventName, data);
+    } else {
+      console.error('Socket is not connected');
+    }
+  }
+
+  on(eventName, callback) {
+    if (!this.listeners.has(eventName)) {
+      this.listeners.set(eventName, new Set());
+    }
+    this.listeners.get(eventName).add(callback);
+
+    if (this.socket) {
+      this.socket.on(eventName, callback);
+    }
+  }
+
+  off(eventName, callback) {
+    if (this.listeners.has(eventName)) {
+      this.listeners.get(eventName).delete(callback);
+    }
+
+    if (this.socket) {
+      this.socket.off(eventName, callback);
+    }
+  }
+
+  setupListeners() {
+    // Set up listeners for Crash game events
+    const crashEvents = ['crashGameUpdate', 'betPlaced', 'playerCashout'];
+    
+    crashEvents.forEach(eventName => {
+      this.socket.on(eventName, (data) => {
+        if (this.listeners.has(eventName)) {
+          this.listeners.get(eventName).forEach(callback => callback(data));
+        }
+      });
+    });
+  }
+}
+
+const socketService = new SocketService();
+export default socketService;
+
+--- ./src/theme.js ---
+
+import { createTheme } from '@mui/material/styles';
+
+const theme = createTheme({
+  palette: {
+    mode: 'dark', // or 'light' depending on your preference
+    background: {
+      paper: '#121212', // Adjust this color as needed
+    },
+    // Add other color configurations as needed
+  },
+  // Add other theme configurations as needed
+});
+
+export default theme;
+
+--- ./src/utils/constants.js ---
+
+// src/utils/constants.js
+
+// Game States
+export const GAME_STATES = {
+    LOADING: "Loading",
+    STARTING: "TakingBets",
+    ACTIVE: "Running",
+    OVER: "Over"
+};
+
+// Rocket States
+export const ROCKET_VISIBLE_STATES = [GAME_STATES.ACTIVE, GAME_STATES.OVER];
+
+// Game Parameters
+export const CRASH_SPEED = 6e-5;
+export const PREDICTING_LAPSE = 500;
+
+// Graph Constants
+export const X_AXIS_MINIMUM = 1000;
+export const Y_AXIS_MINIMUM = -1;
+export const Y_AXIS_MULTIPLIER = 1.5;
+
+// Bet Types
+export const BET_TYPES = {
+    MANUAL: 0,
+    AUTO: 1
+};
+
+// Currency mapping
+export const CURRENCY_MAPPING = {
+    1: "btc",
+    2: "eth",
+    3: "ltc",
+    4: "cash",
+    5: "usdt",
+    6: "usdc",
+    7: "xrp",
+    8: "doge",
+    9: "trx"
+};
+
+// Screen size breakpoint
+export const MOBILE_BREAKPOINT = 600;
+
+// Maximum profit
+export const MAX_PROFIT = 1000000;
+
+// Time constants
+export const MILLISECONDS_PER_SECOND = 1000;
+
+// Animation constants
+export const DEFAULT_ANIMATION_DURATION = 500;
+export const ROCKET_ANGLE_THRESHOLD = 0.2;
+export const ROCKET_ANGLE_INTERPOLATION_FACTOR = 0.1;
+
+// Emitter constants
+export const EMITTER_UPDATE_FACTOR = 0.001;
+
+export const SOCKET_URL = 'wss://your-websocket-server-url.com';
+
+--- ./src/utils/formatters.js ---
+
+// src/utils/formatters.js
+import numeral from 'numeral';
+
+export const formatCurrency = (amount, format = '0,0.00') => {
+    return numeral(amount).format(format);
+};
+
+export const formatMultiplier = (multiplier) => {
+    return `${numeral(multiplier).format('0,0.00')}x`;
+};
+
+export const formatElapsedTime = (elapsed) => {
+    return `${(elapsed / 1000).toFixed(2)}s`;
+};
+
+export const formatLargeNumber = (number) => {
+    const formats = ['0a', '0.0a', '0.00a'];
+    const format = formats.find(f => numeral(number).format(f) !== '0');
+    return numeral(number).format(format || '0,0');
+};
+
+export const formatDecimal = (number, decimals = 2) => {
+    return number.toFixed(decimals);
+};
+
+export const formatPercentage = (number) => {
+    return `${(number * 100).toFixed(2)}%`;
+};
+
+export const formatDate = (date) => {
+    return date.toLocaleString();
+};
+
+export const truncateString = (str, maxLength) => {
+    if (str.length <= maxLength) return str;
+    return str.slice(0, maxLength - 3) + '...';
+};
+
+--- ./src/utils/random.js ---
+
+// src/utils/random.js
+
+export class SeededRandom {
+    constructor(seed) {
+        this.seed = seed;
+    }
+
+    static create(seed) {
+        return new SeededRandom(seed);
+    }
+
+    random() {
+        const x = Math.sin(this.seed++) * 10000;
+        return x - Math.floor(x);
+    }
+}
